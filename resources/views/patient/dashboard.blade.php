@@ -79,9 +79,7 @@
                                 </div>
 
                                 <div class="flex items-center space-x-3 mb-3">
-                                    <div class="w-11 h-11 rounded-xl bg-teal-600 text-white font-bold flex items-center justify-center text-sm shadow-xs shrink-0">
-                                        {{ substr($appt->doctor->user->name, 4, 1) }}
-                                    </div>
+                                    <img src="{{ $appt->doctor->user->avatar_url }}" alt="{{ $appt->doctor->user->name }}" class="w-11 h-11 rounded-xl object-cover ring-2 ring-slate-100 shadow-xs shrink-0">
                                     <div>
                                         <div class="font-bold text-slate-900 text-sm leading-tight">{{ $appt->doctor->user->name }}</div>
                                         <div class="text-xs text-teal-700 font-semibold">{{ $appt->doctor->specialization }}</div>
@@ -107,8 +105,17 @@
 
                             <div class="pt-3 border-t border-slate-200/60 flex items-center justify-between gap-2">
                                 <a href="{{ route('booking.confirmation', $appt) }}" class="flex-1 text-center py-2 px-3 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs shadow-xs transition">
-                                    View Pass / Ticket
+                                    View Pass
                                 </a>
+                                @if($appt->payment_status !== 'paid')
+                                    <a href="{{ route('payment.checkout', $appt) }}" class="py-2 px-3 rounded-xl bg-primary-50 hover:bg-primary-100 text-primary-700 font-bold text-xs border border-primary-200 transition">
+                                        Pay (${{ number_format($appt->fee, 0) }})
+                                    </a>
+                                @else
+                                    <a href="{{ route('payment.receipt', $appt) }}" class="py-2 px-2.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold text-xs border border-emerald-200 transition" title="View Paid Receipt">
+                                        Receipt
+                                    </a>
+                                @endif
                                 @if($appt->canBeCancelled())
                                     <button @click="showCancelModal = true" class="py-2 px-3 rounded-xl bg-white hover:bg-rose-50 text-rose-600 font-bold text-xs border border-rose-200 transition">
                                         Cancel
@@ -202,8 +209,11 @@
                                     </td>
                                     <td class="py-3.5 text-right space-x-1">
                                         @if($appt->medicalRecord)
+                                            <a href="{{ route('patient.records.pdf', $appt->medicalRecord) }}" class="inline-block px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] border border-slate-200">
+                                                PDF
+                                            </a>
                                             <a href="{{ route('patient.records.prescription', $appt->medicalRecord) }}" class="inline-block px-2.5 py-1 rounded-lg bg-teal-50 text-teal-700 hover:bg-teal-100 font-bold text-[11px] border border-teal-200">
-                                                📄 Prescription
+                                                Rx Slip
                                             </a>
                                         @endif
                                         <a href="{{ route('patient.appointments.show', $appt) }}" class="inline-block px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 font-semibold text-[11px]">

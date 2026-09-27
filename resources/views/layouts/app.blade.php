@@ -161,12 +161,51 @@
                     </a>
 
                     @auth
+                        <!-- Notification Bell Dropdown -->
+                        <div class="relative" x-data="{ notifOpen: false }">
+                            <button @click="notifOpen = !notifOpen" class="relative p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition focus:outline-none">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
+                                @if(auth()->user()->unreadNotifications->count() > 0)
+                                    <span class="absolute top-1 right-1 flex h-4 w-4 items-center justify-center rounded-full bg-rose-500 text-[9px] font-bold text-white animate-pulse">
+                                        {{ auth()->user()->unreadNotifications->count() }}
+                                    </span>
+                                @endif
+                            </button>
+
+                            <div x-show="notifOpen" @click.away="notifOpen = false" x-cloak
+                                 class="absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-2xl shadow-xl border border-slate-200 py-3 z-50">
+                                <div class="px-4 py-2 border-b border-slate-100 flex items-center justify-between">
+                                    <h4 class="text-xs font-bold uppercase tracking-wider text-slate-900">Notifications</h4>
+                                    @if(auth()->user()->unreadNotifications->count() > 0)
+                                        <form method="POST" action="{{ route('notifications.markRead') }}">
+                                            @csrf
+                                            <button type="submit" class="text-[11px] font-semibold text-teal-600 hover:text-teal-700">Mark all read</button>
+                                        </form>
+                                    @endif
+                                </div>
+
+                                <div class="max-h-72 overflow-y-auto divide-y divide-slate-100">
+                                    @forelse(auth()->user()->notifications()->take(6)->get() as $notification)
+                                        <div class="p-3 hover:bg-slate-50 transition {{ $notification->read_at ? 'opacity-70' : 'bg-teal-50/30' }}">
+                                            <div class="flex items-start justify-between">
+                                                <p class="text-xs font-bold text-slate-900">{{ $notification->data['title'] ?? 'Notification' }}</p>
+                                                <span class="text-[10px] text-slate-400">{{ $notification->created_at->diffForHumans() }}</span>
+                                            </div>
+                                            <p class="text-xs text-slate-600 mt-0.5 leading-snug">{{ $notification->data['message'] ?? '' }}</p>
+                                        </div>
+                                    @empty
+                                        <div class="py-6 text-center text-xs text-slate-400">
+                                            No notifications at the moment
+                                        </div>
+                                    @endforelse
+                                </div>
+                            </div>
+                        </div>
+
                         <!-- User Dropdown -->
                         <div class="relative" x-data="{ open: false }">
                             <button @click="open = !open" class="flex items-center space-x-2.5 p-1.5 rounded-xl hover:bg-slate-100 transition focus:outline-none">
-                                <div class="w-9 h-9 rounded-xl bg-teal-100 text-teal-800 font-bold flex items-center justify-center text-sm border border-teal-200">
-                                    {{ strtoupper(substr(auth()->user()->name, 0, 2)) }}
-                                </div>
+                                <img src="{{ auth()->user()->avatar_url }}" alt="{{ auth()->user()->name }}" class="w-9 h-9 rounded-xl object-cover ring-2 ring-teal-200 shadow-xs">
                                 <div class="text-left hidden lg:block">
                                     <div class="text-sm font-semibold text-slate-800 leading-tight">{{ auth()->user()->name }}</div>
                                     <div class="text-xs font-medium text-teal-600 capitalize">{{ auth()->user()->role }}</div>
@@ -188,6 +227,10 @@
                                 </div>
 
                                 @if(auth()->user()->isPatient())
+                                    <a href="{{ route('patient.profile') }}" class="flex items-center px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">
+                                        <svg class="w-4 h-4 mr-2.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
+                                        My Profile & Avatar
+                                    </a>
                                     <a href="{{ route('patient.dashboard') }}" class="flex items-center px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">
                                         <svg class="w-4 h-4 mr-2.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>
                                         Patient Portal
@@ -197,13 +240,17 @@
                                         My Medical Records
                                     </a>
                                 @elseif(auth()->user()->isDoctor())
+                                    <a href="{{ route('doctor.profile') }}" class="flex items-center px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">
+                                        <svg class="w-4 h-4 mr-2.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
+                                        Doctor Profile & Bio
+                                    </a>
                                     <a href="{{ route('doctor.dashboard') }}" class="flex items-center px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">
                                         <svg class="w-4 h-4 mr-2.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 8v8m-4-5v5m-4-2v2m-2 4h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
                                         Doctor Dashboard
                                     </a>
                                     <a href="{{ route('doctor.schedule') }}" class="flex items-center px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">
                                         <svg class="w-4 h-4 mr-2.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                                        My Schedule & Hours
+                                        My Schedule & Leaves
                                     </a>
                                 @elseif(auth()->user()->isAdmin())
                                     <a href="{{ route('admin.dashboard') }}" class="flex items-center px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">
@@ -253,9 +300,11 @@
 
             @auth
                 @if(auth()->user()->isPatient())
+                    <a href="{{ route('patient.profile') }}" class="block px-3 py-2 rounded-lg text-base font-medium text-slate-700 hover:bg-slate-50">My Profile & Avatar</a>
                     <a href="{{ route('patient.dashboard') }}" class="block px-3 py-2 rounded-lg text-base font-medium text-slate-700 hover:bg-slate-50">My Appointments</a>
                     <a href="{{ route('patient.records.index') }}" class="block px-3 py-2 rounded-lg text-base font-medium text-slate-700 hover:bg-slate-50">Medical Records</a>
                 @elseif(auth()->user()->isDoctor())
+                    <a href="{{ route('doctor.profile') }}" class="block px-3 py-2 rounded-lg text-base font-medium text-slate-700 hover:bg-slate-50">Doctor Profile & Bio</a>
                     <a href="{{ route('doctor.dashboard') }}" class="block px-3 py-2 rounded-lg text-base font-medium text-slate-700 hover:bg-slate-50">Doctor Dashboard</a>
                     <a href="{{ route('doctor.appointments') }}" class="block px-3 py-2 rounded-lg text-base font-medium text-slate-700 hover:bg-slate-50">Appointments</a>
                     <a href="{{ route('doctor.schedule') }}" class="block px-3 py-2 rounded-lg text-base font-medium text-slate-700 hover:bg-slate-50">My Schedule</a>

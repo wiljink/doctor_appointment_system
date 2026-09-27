@@ -123,6 +123,18 @@
                                     <a href="{{ route('booking.confirmation', $appt) }}" class="inline-block px-2.5 py-1 rounded-lg bg-teal-50 text-teal-700 hover:bg-teal-100 font-bold text-[11px] transition">
                                         Pass
                                     </a>
+                                    @if($appt->payment_status !== 'paid')
+                                        <form method="POST" action="{{ route('admin.appointments.markPaid', $appt) }}" class="inline">
+                                            @csrf
+                                            <button type="submit" class="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-bold text-[11px] transition" title="Mark as Paid at reception">
+                                                💵 Mark Paid
+                                            </button>
+                                        </form>
+                                    @else
+                                        <a href="{{ route('payment.receipt', $appt) }}" target="_blank" class="inline-block px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-bold text-[11px] transition">
+                                            Receipt
+                                        </a>
+                                    @endif
 
                                     <!-- Status Update Modal -->
                                     <div x-show="openStatusModal" x-cloak

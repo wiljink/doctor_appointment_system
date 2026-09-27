@@ -8,11 +8,16 @@ use App\Models\DoctorLeave;
 use App\Models\DoctorSchedule;
 use App\Models\MedicalRecord;
 use App\Models\PrescriptionItem;
+use App\Notifications\AppointmentStatusChangedNotification;
+use App\Services\SmsService;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\View\View;
 
 class DoctorDashboardController extends Controller
@@ -107,6 +112,12 @@ class DoctorDashboardController extends Controller
 
         $appointment->update($updateData);
 
+        // Notify patient
+        if ($appointment->patient) {
+            $appointment->patient->notify(new AppointmentStatusChangedNotification($appointment, $validated['status'], $validated['cancellation_reason'] ?? null));
+        }
+        app(SmsService::class)->sendStatusUpdate($appointment, $validated['status'], $validated['cancellation_reason'] ?? null);
+
         return back()->with('status', 'Appointment status updated to '.ucfirst($validated['status']).'.');
     }
 
@@ -197,6 +208,12 @@ class DoctorDashboardController extends Controller
                 'status' => 'completed',
                 'payment_status' => $validated['payment_status'],
             ]);
+
+            // Notify patient that prescription and consultation notes are ready
+            if ($appointment->patient) {
+                $appointment->patient->notify(new AppointmentStatusChangedNotification($appointment, 'completed'));
+            }
+            app(SmsService::class)->sendStatusUpdate($appointment, 'completed');
         });
 
         return redirect()->route('doctor.appointments')
@@ -281,5 +298,78 @@ class DoctorDashboardController extends Controller
         $leave->delete();
 
         return back()->with('status', 'Scheduled leave removed.');
+    }
+
+    /**
+     * Download prescription PDF for doctor.
+     */
+    public function downloadPrescriptionPdf(MedicalRecord $record): Response
+    {
+        $doctor = $this->getDoctor();
+
+        if ($record->doctor_id !== $doctor->id) {
+            abort(403, 'Unauthorized access to this prescription.');
+        }
+
+        $record->load(['doctor.user', 'doctor.department', 'appointment', 'prescriptions', 'patient']);
+
+        $pdf = Pdf::loadView('prescriptions.pdf', compact('record'))
+            ->setPaper('a4', 'portrait');
+
+        return $pdf->download("Prescription-{$record->appointment->appointment_number}.pdf");
+    }
+
+    /**
+     * Show doctor profile edit form.
+     */
+    public function profile(): View
+    {
+        $doctor = $this->getDoctor();
+        $user = Auth::user();
+
+        return view('doctor.profile', compact('doctor', 'user'));
+    }
+
+    /**
+     * Update doctor profile, clinic details, and avatar image.
+     */
+    public function updateProfile(Request $request): RedirectResponse
+    {
+        $doctor = $this->getDoctor();
+        $user = Auth::user();
+
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'phone' => ['nullable', 'string', 'max:20'],
+            'specialization' => ['required', 'string', 'max:255'],
+            'qualifications' => ['required', 'string', 'max:255'],
+            'experience_years' => ['required', 'integer', 'min:0', 'max:60'],
+            'consultation_fee' => ['required', 'numeric', 'min:0'],
+            'room_number' => ['required', 'string', 'max:50'],
+            'bio' => ['nullable', 'string', 'max:2000'],
+            'avatar' => ['nullable', 'image', 'mimes:jpeg,png,jpg,webp', 'max:2048'],
+        ]);
+
+        if ($request->hasFile('avatar')) {
+            if ($user->avatar && Storage::disk('public')->exists($user->avatar)) {
+                Storage::disk('public')->delete($user->avatar);
+            }
+            $user->avatar = $request->file('avatar')->store('avatars', 'public');
+        }
+
+        $user->name = $validated['name'];
+        $user->phone = $validated['phone'];
+        $user->save();
+
+        $doctor->update([
+            'specialization' => $validated['specialization'],
+            'qualifications' => $validated['qualifications'],
+            'experience_years' => $validated['experience_years'],
+            'consultation_fee' => $validated['consultation_fee'],
+            'room_number' => $validated['room_number'],
+            'bio' => $validated['bio'],
+        ]);
+
+        return back()->with('status', 'Doctor profile and credentials updated successfully.');
     }
 }

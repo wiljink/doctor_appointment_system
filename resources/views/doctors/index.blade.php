@@ -83,9 +83,7 @@
 
                         <!-- Doctor Info -->
                         <div class="flex items-center space-x-3.5 mb-3">
-                            <div class="w-14 h-14 rounded-2xl bg-gradient-to-tr from-teal-500 to-emerald-400 text-white font-black text-xl flex items-center justify-center shrink-0 shadow-sm">
-                                {{ substr($doctor->user->name, 4, 1) }}
-                            </div>
+                            <img src="{{ $doctor->user->avatar_url }}" alt="{{ $doctor->user->name }}" class="w-14 h-14 rounded-2xl object-cover ring-2 ring-slate-100 shadow-sm shrink-0">
                             <div>
                                 <h3 class="text-lg font-bold text-slate-900 leading-snug">
                                     <a href="{{ route('doctors.show', $doctor) }}" class="hover:text-teal-600 transition">

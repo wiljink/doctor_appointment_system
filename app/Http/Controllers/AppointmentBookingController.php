@@ -5,7 +5,9 @@ namespace App\Http\Controllers;
 use App\Models\Appointment;
 use App\Models\Department;
 use App\Models\Doctor;
+use App\Notifications\AppointmentBookedNotification;
 use App\Services\AppointmentSlotService;
+use App\Services\SmsService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -109,6 +111,25 @@ class AppointmentBookingController extends Controller
             'payment_status' => 'unpaid',
             'payment_method' => $validated['payment_method'],
         ]);
+
+        // Dispatch email & in-app database notifications
+        $patient = Auth::user();
+        if ($patient) {
+            $patient->notify(new AppointmentBookedNotification($appointment, 'patient'));
+        }
+
+        if ($doctor->user) {
+            $doctor->user->notify(new AppointmentBookedNotification($appointment, 'doctor'));
+        }
+
+        // Dispatch SMS notification to patient
+        app(SmsService::class)->sendBookingConfirmation($appointment);
+
+        // Redirect to Online Payment Checkout if card/online selected
+        if (in_array($validated['payment_method'], ['card', 'online', 'digital_wallet'])) {
+            return redirect()->route('payment.checkout', $appointment)
+                ->with('status', 'Appointment reserved! Please complete your consultation fee payment.');
+        }
 
         return redirect()->route('booking.confirmation', $appointment)
             ->with('status', 'Appointment booked successfully!');

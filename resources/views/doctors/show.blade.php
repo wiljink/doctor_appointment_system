@@ -15,9 +15,7 @@
     <div class="bg-white rounded-3xl p-6 sm:p-8 shadow-sm border border-slate-200 mb-8">
         <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
             <div class="flex items-center space-x-5">
-                <div class="w-20 h-20 sm:w-24 sm:h-24 rounded-3xl bg-gradient-to-tr from-teal-600 to-emerald-400 text-white font-black text-3xl sm:text-4xl flex items-center justify-center shrink-0 shadow-md shadow-teal-600/20">
-                    {{ substr($doctor->user->name, 4, 1) }}
-                </div>
+                <img src="{{ $doctor->user->avatar_url }}" alt="{{ $doctor->user->name }}" class="w-20 h-20 sm:w-24 sm:h-24 rounded-3xl object-cover ring-4 ring-teal-100 shadow-md shrink-0">
                 <div>
                     <div class="flex items-center space-x-2">
                         <span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-teal-50 text-teal-700 border border-teal-200">

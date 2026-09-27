@@ -30,6 +30,9 @@ class Appointment extends Model
         'fee',
         'payment_status',
         'payment_method',
+        'transaction_id',
+        'paid_at',
+        'reminder_sent_at',
         'cancellation_reason',
         'cancelled_by',
     ];
@@ -43,6 +46,8 @@ class Appointment extends Model
     {
         return [
             'appointment_date' => 'date',
+            'paid_at' => 'datetime',
+            'reminder_sent_at' => 'datetime',
             'fee' => 'decimal:2',
         ];
     }

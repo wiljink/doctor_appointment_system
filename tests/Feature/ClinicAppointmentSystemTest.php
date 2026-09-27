@@ -4,9 +4,13 @@ namespace Tests\Feature;
 
 use App\Models\Appointment;
 use App\Models\Doctor;
+use App\Models\MedicalRecord;
 use App\Models\User;
+use App\Notifications\AppointmentBookedNotification;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class ClinicAppointmentSystemTest extends TestCase
@@ -229,5 +233,161 @@ class ClinicAppointmentSystemTest extends TestCase
             'status' => 'cancelled',
             'cancelled_by' => 'patient',
         ]);
+    }
+
+    public function test_patient_can_checkout_and_pay_appointment_fee(): void
+    {
+        $patient = User::where('role', 'patient')->first();
+        $this->assertNotNull($patient);
+
+        $doctor = Doctor::first();
+        $appointment = Appointment::create([
+            'appointment_number' => 'APT-PAY-TEST',
+            'patient_id' => $patient->id,
+            'doctor_id' => $doctor->id,
+            'department_id' => $doctor->department_id,
+            'appointment_date' => Carbon::tomorrow()->toDateString(),
+            'appointment_time' => '10:00:00',
+            'end_time' => '10:30:00',
+            'status' => 'pending',
+            'reason' => 'Payment test',
+            'fee' => 75.00,
+            'payment_status' => 'unpaid',
+            'payment_method' => 'card',
+        ]);
+
+        // Checkout page loads
+        $checkoutResponse = $this->actingAs($patient)->get(route('payment.checkout', $appointment));
+        $checkoutResponse->assertStatus(200);
+        $checkoutResponse->assertSee('Consultation Fee Checkout');
+
+        // Process payment
+        $payResponse = $this->actingAs($patient)->post(route('payment.process', $appointment), [
+            'payment_method' => 'card',
+            'card_holder' => 'John Doe',
+            'card_number' => '4242 4242 4242 4242',
+            'card_expiry' => '12/28',
+            'card_cvv' => '123',
+        ]);
+
+        $payResponse->assertRedirect(route('payment.receipt', $appointment));
+
+        $appointment->refresh();
+        $this->assertEquals('paid', $appointment->payment_status);
+        $this->assertNotNull($appointment->transaction_id);
+        $this->assertNotNull($appointment->paid_at);
+
+        // Receipt page loads
+        $receiptResponse = $this->actingAs($patient)->get(route('payment.receipt', $appointment));
+        $receiptResponse->assertStatus(200);
+        $receiptResponse->assertSee('Official Receipt');
+        $receiptResponse->assertSee($appointment->transaction_id);
+    }
+
+    public function test_patient_and_doctor_can_download_prescription_pdf(): void
+    {
+        $record = MedicalRecord::with(['patient', 'doctor.user'])->first();
+        $this->assertNotNull($record);
+
+        $patient = $record->patient;
+        $doctorUser = $record->doctor->user;
+
+        // Patient downloads PDF
+        $patientPdfResponse = $this->actingAs($patient)->get(route('patient.records.pdf', $record));
+        $patientPdfResponse->assertStatus(200);
+        $this->assertEquals('application/pdf', $patientPdfResponse->headers->get('content-type'));
+
+        // Doctor downloads PDF
+        $doctorPdfResponse = $this->actingAs($doctorUser)->get(route('doctor.records.pdf', $record));
+        $doctorPdfResponse->assertStatus(200);
+        $this->assertEquals('application/pdf', $doctorPdfResponse->headers->get('content-type'));
+    }
+
+    public function test_patient_can_update_profile_and_avatar(): void
+    {
+        Storage::fake('public');
+
+        $patient = User::where('role', 'patient')->first();
+        $this->assertNotNull($patient);
+
+        $file = UploadedFile::fake()->image('avatar.jpg', 200, 200);
+
+        $response = $this->actingAs($patient)->put(route('patient.profile.update'), [
+            'name' => 'Johnathan Doe Updated',
+            'phone' => '+1-555-9988',
+            'date_of_birth' => '1990-05-15',
+            'gender' => 'male',
+            'blood_group' => 'O+',
+            'address' => '123 Test Boulevard',
+            'emergency_contact' => '+1-555-1122',
+            'avatar' => $file,
+        ]);
+
+        $response->assertRedirect();
+        $patient->refresh();
+
+        $this->assertEquals('Johnathan Doe Updated', $patient->name);
+        $this->assertEquals('+1-555-9988', $patient->phone);
+        $this->assertNotNull($patient->avatar);
+        Storage::disk('public')->assertExists($patient->avatar);
+    }
+
+    public function test_automated_appointment_reminders_command(): void
+    {
+        $patient = User::where('role', 'patient')->first();
+        $doctor = Doctor::first();
+
+        $appointment = Appointment::create([
+            'appointment_number' => 'APT-REMIND-TEST',
+            'patient_id' => $patient->id,
+            'doctor_id' => $doctor->id,
+            'department_id' => $doctor->department_id,
+            'appointment_date' => Carbon::tomorrow()->toDateString(),
+            'appointment_time' => '09:00:00',
+            'end_time' => '09:30:00',
+            'status' => 'confirmed',
+            'reason' => 'Reminder command test',
+            'fee' => 70.00,
+            'payment_status' => 'paid',
+            'payment_method' => 'card',
+        ]);
+
+        $this->artisan('clinic:send-reminders')
+            ->expectsOutputToContain('upcoming appointments eligible for reminders.')
+            ->assertSuccessful();
+
+        $appointment->refresh();
+        $this->assertNotNull($appointment->reminder_sent_at);
+    }
+
+    public function test_in_app_notifications_can_be_marked_as_read(): void
+    {
+        $patient = User::where('role', 'patient')->first();
+        $doctor = Doctor::first();
+
+        $appointment = Appointment::create([
+            'appointment_number' => 'APT-NOTIF-TEST',
+            'patient_id' => $patient->id,
+            'doctor_id' => $doctor->id,
+            'department_id' => $doctor->department_id,
+            'appointment_date' => Carbon::tomorrow()->toDateString(),
+            'appointment_time' => '14:00:00',
+            'end_time' => '14:30:00',
+            'status' => 'pending',
+            'reason' => 'Notification test',
+            'fee' => 70.00,
+            'payment_status' => 'unpaid',
+            'payment_method' => 'cash',
+        ]);
+
+        $patient->notify(new AppointmentBookedNotification($appointment, 'patient'));
+
+        $this->assertTrue($patient->unreadNotifications->count() > 0);
+
+        $response = $this->actingAs($patient)->post(route('notifications.markRead'));
+        $response->assertRedirect();
+
+        $patient->refresh();
+        $this->assertEquals(0, $patient->unreadNotifications->count());
     }
 }

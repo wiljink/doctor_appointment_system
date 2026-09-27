@@ -131,15 +131,25 @@
                 Print Appointment Pass
             </button>
 
-            <div class="flex items-center space-x-2 w-full sm:w-auto">
+            <div class="flex flex-col sm:flex-row items-center space-y-2 sm:space-y-0 sm:space-x-2 w-full sm:w-auto">
+                @if($appointment->payment_status !== 'paid')
+                    <a href="{{ route('payment.checkout', $appointment) }}" class="w-full sm:w-auto text-center px-4 py-2.5 rounded-xl bg-primary-600 hover:bg-primary-700 text-white font-bold text-xs shadow-md shadow-primary-500/20 transition">
+                        Pay Fee Online (${{ number_format($appointment->fee, 2) }}) &rarr;
+                    </a>
+                @else
+                    <a href="{{ route('payment.receipt', $appointment) }}" class="w-full sm:w-auto text-center px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-sm transition">
+                        View Payment Receipt &rarr;
+                    </a>
+                @endif
+
                 @auth
                     @if(auth()->user()->isPatient())
-                        <a href="{{ route('patient.dashboard') }}" class="w-full sm:w-auto text-center px-4 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs shadow-sm transition">
-                            Go to Patient Portal &rarr;
+                        <a href="{{ route('patient.dashboard') }}" class="w-full sm:w-auto text-center px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs shadow-sm transition">
+                            Patient Portal &rarr;
                         </a>
                     @elseif(auth()->user()->isAdmin())
-                        <a href="{{ route('admin.appointments.index') }}" class="w-full sm:w-auto text-center px-4 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs shadow-sm transition">
-                            View in Admin Panel &rarr;
+                        <a href="{{ route('admin.appointments.index') }}" class="w-full sm:w-auto text-center px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs shadow-sm transition">
+                            Admin Panel &rarr;
                         </a>
                     @endif
                 @else

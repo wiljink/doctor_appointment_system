@@ -7,11 +7,14 @@ use App\Models\Department;
 use App\Models\Doctor;
 use App\Models\DoctorSchedule;
 use App\Models\User;
+use App\Notifications\AppointmentStatusChangedNotification;
+use App\Services\SmsService;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
@@ -110,6 +113,12 @@ class AdminDashboardController extends Controller
 
         if (! empty($validated['payment_status'])) {
             $data['payment_status'] = $validated['payment_status'];
+            if ($validated['payment_status'] === 'paid' && $appointment->payment_status !== 'paid') {
+                $data['paid_at'] = Carbon::now();
+                if (! $appointment->transaction_id) {
+                    $data['transaction_id'] = 'ADMIN-'.Carbon::now()->format('Ymd').'-'.strtoupper(Str::random(5));
+                }
+            }
         }
 
         if ($validated['status'] === 'cancelled') {
@@ -119,7 +128,25 @@ class AdminDashboardController extends Controller
 
         $appointment->update($data);
 
+        // Notify patient
+        if ($appointment->patient) {
+            $appointment->patient->notify(new AppointmentStatusChangedNotification($appointment, $validated['status'], $validated['cancellation_reason'] ?? null));
+        }
+        app(SmsService::class)->sendStatusUpdate($appointment, $validated['status'], $validated['cancellation_reason'] ?? null);
+
         return back()->with('status', 'Appointment #'.$appointment->appointment_number.' updated successfully.');
+    }
+
+    public function markPaymentPaid(Appointment $appointment): RedirectResponse
+    {
+        $appointment->update([
+            'payment_status' => 'paid',
+            'payment_method' => $appointment->payment_method ?: 'cash',
+            'transaction_id' => $appointment->transaction_id ?: 'DESK-'.Carbon::now()->format('Ymd').'-'.strtoupper(Str::random(5)),
+            'paid_at' => Carbon::now(),
+        ]);
+
+        return back()->with('status', 'Consultation fee for Appointment #'.$appointment->appointment_number.' marked as Paid.');
     }
 
     public function doctors(): View
@@ -148,9 +175,15 @@ class AdminDashboardController extends Controller
             'consultation_fee' => ['required', 'numeric', 'min:0'],
             'room_number' => ['nullable', 'string', 'max:100'],
             'bio' => ['nullable', 'string', 'max:1000'],
+            'avatar' => ['nullable', 'image', 'mimes:jpeg,png,jpg,webp', 'max:2048'],
         ]);
 
-        DB::transaction(function () use ($validated): void {
+        DB::transaction(function () use ($validated, $request): void {
+            $avatarPath = null;
+            if ($request->hasFile('avatar')) {
+                $avatarPath = $request->file('avatar')->store('avatars', 'public');
+            }
+
             $user = User::create([
                 'name' => $validated['name'],
                 'email' => $validated['email'],
@@ -158,6 +191,7 @@ class AdminDashboardController extends Controller
                 'role' => 'doctor',
                 'phone' => $validated['phone'],
                 'gender' => $validated['gender'],
+                'avatar' => $avatarPath,
                 'is_active' => true,
                 'email_verified_at' => now(),
             ]);
@@ -207,14 +241,24 @@ class AdminDashboardController extends Controller
             'room_number' => ['nullable', 'string', 'max:100'],
             'bio' => ['nullable', 'string', 'max:1000'],
             'is_available' => ['nullable', 'boolean'],
+            'avatar' => ['nullable', 'image', 'mimes:jpeg,png,jpg,webp', 'max:2048'],
         ]);
 
-        $doctor->user->update([
+        $userData = [
             'name' => $validated['name'],
             'email' => $validated['email'],
             'phone' => $validated['phone'],
             'gender' => $validated['gender'],
-        ]);
+        ];
+
+        if ($request->hasFile('avatar')) {
+            if ($doctor->user->avatar && Storage::disk('public')->exists($doctor->user->avatar)) {
+                Storage::disk('public')->delete($doctor->user->avatar);
+            }
+            $userData['avatar'] = $request->file('avatar')->store('avatars', 'public');
+        }
+
+        $doctor->user->update($userData);
 
         $doctor->update([
             'department_id' => $validated['department_id'],
